@@ -4,6 +4,8 @@ import multiprocessing.queues
 import lirc
 import pifacecommon.interrupts
 
+# The lirc API changed. Need a global object replacement for lirc
+Glircd = None
 
 class IREvent(object):
     """An IR event."""
@@ -60,7 +62,8 @@ class IREventListener(object):
         """When activated the :class:`IREventListener` will run callbacks
         associated with IR codes.
         """
-        lirc.init(self.prog, self.lircrc)
+        global Glircd
+        Glircd = lirc.LircdConnection(self.prog, self.lircrc)
         self.dispatcher.start()
         self.detector.start()
 
@@ -71,8 +74,8 @@ class IREventListener(object):
         self.event_queue.put(self.TERMINATE_SIGNAL)
         self.dispatcher.join()
         self.detector.terminate()  # maybe use a message queue instead?
-        lirc.deinit()
-
+        global Glircd
+        Glircd.close()
 
 def _event_matches_ir_function_map(event, ir_function_map):
     return event.ir_code == ir_function_map.ir_code
@@ -84,6 +87,7 @@ def watch_ir_events(event_queue):
     :param event_queue: A queue to put events on.
     :type event_queue: :py:class:`multiprocessing.Queue`
     """
+    global Glircd
     while True:
-        for ir_code in lirc.nextcode():
-            event_queue.put(IREvent(ir_code))
+        ir_code = Glircd.readline()
+        event_queue.put(IREvent(ir_code))
